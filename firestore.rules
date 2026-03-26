@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: articles
+    // Fields: headline, summary, content, highlights, category, language, sourceName, sourceUrl, publishedAt, slug, originalId
+    //
+    // Collection: raw_news
+    // Fields: title, link, pubDate, contentSnippet, source, processed, createdAt
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "sujan1nepal.wsn@gmail.com" && request.auth.token.email_verified == true);
+    }
+
+    function isValidArticle(data) {
+      return data.headline is string && data.headline.size() > 0 && data.headline.size() < 500 &&
+             data.summary is string && data.summary.size() > 0 && data.summary.size() < 2000 &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 10000 &&
+             data.category is string && data.language in ['en', 'ne', 'hi'] &&
+             data.sourceName is string && data.sourceUrl is string &&
+             data.slug is string && data.slug.size() > 0 &&
+             (!('videoUrl' in data) || data.videoUrl is string);
+    }
+
+    function isValidRawNews(data) {
+      return data.title is string && data.title.size() > 0 &&
+             data.link is string && data.link.size() > 0 &&
+             data.source is string && data.processed is bool;
+    }
+
+    // Articles: Publicly readable, only admin can write
+    match /articles/{articleId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin() && isValidArticle(request.resource.data);
+    }
+
+    // Raw News: Only admin can read and write
+    match /raw_news/{newsId} {
+      allow read, create, update, delete: if isAdmin() && (request.method == 'get' || request.method == 'list' || isValidRawNews(request.resource.data));
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

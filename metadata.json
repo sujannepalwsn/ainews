@@ -1,0 +1,5 @@
+{
+  "name": "Global News AI",
+  "description": "An automated AI news portal that collects, rewrites, and translates global news using Gemini AI.",
+  "requestFramePermissions": []
+}

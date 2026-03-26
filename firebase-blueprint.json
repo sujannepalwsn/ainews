@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "Article": {
+      "title": "Article",
+      "description": "A rewritten and translated news article.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "headline": { "type": "string" },
+        "summary": { "type": "string" },
+        "content": { "type": "string" },
+        "highlights": { "type": "array", "items": { "type": "string" } },
+        "category": { "type": "string" },
+        "language": { "type": "string", "enum": ["en", "ne", "hi"] },
+        "sourceName": { "type": "string" },
+        "sourceUrl": { "type": "string" },
+        "publishedAt": { "type": "string", "format": "date-time" },
+        "slug": { "type": "string" },
+        "originalId": { "type": "string" }
+      },
+      "required": ["headline", "summary", "content", "category", "language", "sourceName", "sourceUrl", "publishedAt", "slug"]
+    },
+    "RawNews": {
+      "title": "RawNews",
+      "description": "Raw news data collected from RSS feeds.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "link": { "type": "string" },
+        "pubDate": { "type": "string" },
+        "contentSnippet": { "type": "string" },
+        "source": { "type": "string" },
+        "processed": { "type": "boolean" }
+      },
+      "required": ["title", "link", "pubDate", "source"]
+    }
+  },
+  "firestore": {
+    "/articles": {
+      "schema": "Article",
+      "description": "Collection of processed news articles."
+    },
+    "/raw_news": {
+      "schema": "RawNews",
+      "description": "Collection of raw news items to be processed."
+    }
+  }
+}
