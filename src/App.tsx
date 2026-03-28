@@ -43,7 +43,14 @@ import {
   Video,
   Play,
   Download,
-  Key
+  Key,
+  Search,
+  ArrowRight,
+  Clock,
+  Share2,
+  Bookmark,
+  Mail,
+  ChevronDown
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import ReactMarkdown from "react-markdown";
@@ -67,6 +74,8 @@ interface Article {
   originalId: string;
   videoUrl?: string;
   videoGeneratedAt?: any;
+  mediaUrl?: string;
+  isImage?: boolean;
 }
 
 interface RawNews {
@@ -77,20 +86,19 @@ interface RawNews {
   contentSnippet: string;
   source: string;
   processed: boolean;
+  imageUrl?: string;
 }
 
 // --- Constants ---
 const CATEGORIES = [
-  { id: "politics", name: "राजनीति", en: "Politics", icon: Globe },
+  { id: "world", name: "विश्व", en: "World", icon: Globe },
+  { id: "politics", name: "राजनीति", en: "Politics", icon: ShieldAlert },
   { id: "business", name: "व्यवसाय", en: "Business", icon: Briefcase },
   { id: "technology", name: "प्रविधि", en: "Technology", icon: Cpu },
   { id: "health", name: "स्वास्थ्य", en: "Health", icon: HeartPulse },
   { id: "science", name: "विज्ञान", en: "Science", icon: FlaskConical },
   { id: "sports", name: "खेलकुद", en: "Sports", icon: Trophy },
   { id: "entertainment", name: "मनोरञ्जन", en: "Entertainment", icon: Clapperboard },
-  { id: "education", name: "शिक्षा", en: "Education", icon: GraduationCap },
-  { id: "environment", name: "वातावरण", en: "Environment", icon: Leaf },
-  { id: "crime", name: "अपराध", en: "Crime", icon: ShieldAlert },
   { id: "lifestyle", name: "जीवनशैली", en: "Lifestyle", icon: Smile },
 ];
 
@@ -196,121 +204,240 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 
 const ADMIN_EMAIL = "sujan1nepal.wsn@gmail.com";
 
-const Navbar = ({ user, lang, setLang }: { user: User | null, lang: string, setLang: (l: string) => void }) => {
+const Navbar = ({ 
+  user, 
+  lang, 
+  setLang, 
+  searchQuery, 
+  setSearchQuery 
+}: { 
+  user: User | null, 
+  lang: string, 
+  setLang: (l: string) => void,
+  searchQuery: string,
+  setSearchQuery: (q: string) => void
+}) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const isAdmin = user?.email === ADMIN_EMAIL;
 
   return (
-    <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16 items-center">
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="bg-blue-600 p-2 rounded-lg group-hover:rotate-12 transition-transform">
-              <Newspaper className="text-white w-6 h-6" />
-            </div>
-            <span className="text-xl font-bold tracking-tight text-gray-900">Global News AI</span>
-          </Link>
-
-          <div className="hidden md:flex items-center gap-6">
-            <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-full">
-              {LANGUAGES.map((l) => (
-                <button
-                  key={l.code}
-                  onClick={() => setLang(l.code)}
-                  className={cn(
-                    "px-3 py-1 rounded-full text-sm font-medium transition-all",
-                    lang === l.code ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-900"
-                  )}
-                >
-                  {l.name}
-                </button>
-              ))}
-            </div>
-            {user ? (
-              <div className="flex items-center gap-3">
-                <img src={user.photoURL || ""} alt={user.displayName || ""} className="w-8 h-8 rounded-full border border-gray-200" />
-                <button onClick={() => signOut(auth)} className="text-sm font-medium text-gray-600 hover:text-gray-900">Sign Out</button>
-                {isAdmin && (
-                  <Link to="/admin" className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-gray-800 transition-all">
-                    <Settings className="w-4 h-4" />
-                    Admin
-                  </Link>
-                )}
-              </div>
-            ) : (
-              <button
-                onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-              >
-                Sign In
-              </button>
-            )}
-          </div>
-
-          <div className="md:hidden">
-            <button onClick={() => setIsOpen(!isOpen)} className="p-2 text-gray-500">
-              {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
-          </div>
-        </div>
+    <header className="sticky top-0 z-50 w-full">
+      {/* Top Bar */}
+      <div className="bg-brand-primary text-white py-1 px-4 text-[10px] font-bold uppercase tracking-[0.2em] text-center">
+        Breaking: AI-Powered Global News Network • {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
       </div>
+      
+      {/* Main Nav */}
+      <nav className="bg-white/90 backdrop-blur-xl border-b border-brand-line">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-20 items-center">
+            {/* Logo */}
+            <Link to="/" className="flex items-center gap-3 group">
+              <div className="bg-brand-ink p-2.5 rounded-sm group-hover:bg-brand-accent transition-colors">
+                <Newspaper className="text-white w-6 h-6" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-2xl font-serif font-black tracking-tighter text-brand-ink leading-none">GLOBAL</span>
+                <span className="text-[10px] font-bold tracking-[0.3em] text-brand-muted leading-none mt-1">NEWS AI</span>
+              </div>
+            </Link>
 
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-white border-b border-gray-200 overflow-hidden"
-          >
-            <div className="px-4 pt-2 pb-6 space-y-4">
-              <div className="flex flex-wrap gap-2">
+            {/* Desktop Navigation */}
+            <div className="hidden lg:flex items-center gap-8">
+              {CATEGORIES.slice(0, 5).map((cat) => (
+                <Link 
+                  key={cat.id} 
+                  to={`/?category=${cat.id}`}
+                  className="text-xs font-bold uppercase tracking-widest text-brand-muted hover:text-brand-accent transition-colors"
+                >
+                  {lang === 'en' ? cat.en : cat.name}
+                </Link>
+              ))}
+              <div className="h-4 w-px bg-brand-line mx-2" />
+              <button 
+                onClick={() => setIsSearchOpen(!isSearchOpen)}
+                className="p-2 text-brand-muted hover:text-brand-ink transition-colors"
+              >
+                <Search className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* User & Lang */}
+            <div className="hidden md:flex items-center gap-6">
+              <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-full border border-brand-line">
                 {LANGUAGES.map((l) => (
                   <button
                     key={l.code}
-                    onClick={() => { setLang(l.code); setIsOpen(false); }}
+                    onClick={() => setLang(l.code)}
                     className={cn(
-                      "px-4 py-2 rounded-lg text-sm font-medium border",
-                      lang === l.code ? "bg-blue-50 border-blue-200 text-blue-600" : "border-gray-200 text-gray-600"
+                      "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all",
+                      lang === l.code ? "bg-white text-brand-accent shadow-sm" : "text-brand-muted hover:text-brand-ink"
                     )}
                   >
                     {l.name}
                   </button>
                 ))}
               </div>
+              
               {user ? (
-                <div className="flex flex-col gap-4 pt-4 border-t border-gray-100">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <img src={user.photoURL || ""} alt={user.displayName || ""} className="w-10 h-10 rounded-full" />
-                      <span className="font-medium text-gray-900">{user.displayName}</span>
-                    </div>
-                    <button onClick={() => signOut(auth)} className="text-sm text-red-600 font-medium">Sign Out</button>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 group cursor-pointer">
+                    <img src={user.photoURL || ""} alt="" className="w-8 h-8 rounded-full border border-brand-line" />
+                    <ChevronDown className="w-4 h-4 text-brand-muted group-hover:text-brand-ink" />
                   </div>
                   {isAdmin && (
-                    <Link 
-                      to="/admin" 
-                      onClick={() => setIsOpen(false)}
-                      className="flex items-center justify-center gap-2 bg-gray-900 text-white px-4 py-3 rounded-xl font-bold"
-                    >
-                      <Settings className="w-5 h-5" />
-                      Admin Dashboard
+                    <Link to="/admin" className="bg-brand-ink text-white p-2 rounded-sm hover:bg-brand-accent transition-colors">
+                      <Settings className="w-4 h-4" />
                     </Link>
                   )}
+                  <button onClick={() => signOut(auth)} className="text-[10px] font-bold uppercase tracking-widest text-red-500 hover:text-red-600">Exit</button>
                 </div>
               ) : (
                 <button
                   onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
-                  className="w-full bg-blue-600 text-white px-4 py-3 rounded-xl font-medium"
+                  className="bg-brand-ink text-white px-6 py-2.5 rounded-sm text-xs font-bold uppercase tracking-widest hover:bg-brand-accent transition-all"
                 >
                   Sign In
                 </button>
               )}
             </div>
+
+            {/* Mobile Menu Button */}
+            <div className="lg:hidden flex items-center gap-4">
+              <button onClick={() => setIsSearchOpen(!isSearchOpen)} className="p-2 text-brand-muted">
+                <Search className="w-5 h-5" />
+              </button>
+              <button onClick={() => setIsOpen(!isOpen)} className="p-2 text-brand-ink">
+                {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Search Bar Overlay */}
+        <AnimatePresence>
+          {isSearchOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="absolute top-full left-0 w-full bg-white border-b border-brand-line p-4 shadow-2xl"
+            >
+              <div className="max-w-3xl mx-auto relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-muted" />
+                <input 
+                  type="text"
+                  placeholder="Search for news, topics, or keywords..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-lg focus:ring-2 focus:ring-brand-accent text-lg font-serif"
+                  autoFocus
+                />
+                <button 
+                  onClick={() => setIsSearchOpen(false)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-ink"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </nav>
+
+      {/* Mobile Menu */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, x: "100%" }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: "100%" }}
+            className="fixed inset-0 z-[60] bg-white lg:hidden"
+          >
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-12">
+                <div className="flex items-center gap-3">
+                  <div className="bg-brand-ink p-2 rounded-sm">
+                    <Newspaper className="text-white w-6 h-6" />
+                  </div>
+                  <span className="text-xl font-serif font-black tracking-tighter">GLOBAL NEWS</span>
+                </div>
+                <button onClick={() => setIsOpen(false)} className="p-2 text-brand-ink">
+                  <X className="w-8 h-8" />
+                </button>
+              </div>
+
+              <div className="space-y-8">
+                <div className="grid grid-cols-2 gap-4">
+                  {CATEGORIES.map((cat) => (
+                    <Link 
+                      key={cat.id} 
+                      to={`/?category=${cat.id}`}
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg"
+                    >
+                      <cat.icon className="w-5 h-5 text-brand-accent" />
+                      <span className="text-sm font-bold uppercase tracking-widest">{lang === 'en' ? cat.en : cat.name}</span>
+                    </Link>
+                  ))}
+                </div>
+
+                <div className="pt-8 border-t border-brand-line">
+                  <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-muted mb-4">Edition</h4>
+                  <div className="flex gap-2">
+                    {LANGUAGES.map((l) => (
+                      <button
+                        key={l.code}
+                        onClick={() => { setLang(l.code); setIsOpen(false); }}
+                        className={cn(
+                          "flex-1 py-3 rounded-lg text-xs font-bold uppercase tracking-widest border",
+                          lang === l.code ? "bg-brand-ink text-white border-brand-ink" : "border-brand-line text-brand-muted"
+                        )}
+                      >
+                        {l.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {user ? (
+                  <div className="pt-8 border-t border-brand-line">
+                    <div className="flex items-center gap-4 mb-6">
+                      <img src={user.photoURL || ""} alt="" className="w-12 h-12 rounded-full" />
+                      <div>
+                        <p className="font-bold text-brand-ink">{user.displayName}</p>
+                        <p className="text-xs text-brand-muted">{user.email}</p>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      {isAdmin && (
+                        <Link 
+                          to="/admin" 
+                          onClick={() => setIsOpen(false)}
+                          className="flex items-center justify-center gap-2 w-full py-4 bg-brand-ink text-white rounded-lg font-bold uppercase tracking-widest"
+                        >
+                          <Settings className="w-5 h-5" />
+                          Admin Dashboard
+                        </Link>
+                      )}
+                      <button onClick={() => signOut(auth)} className="w-full py-4 border border-red-200 text-red-500 rounded-lg font-bold uppercase tracking-widest">Sign Out</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
+                    className="w-full py-4 bg-brand-ink text-white rounded-lg font-bold uppercase tracking-widest"
+                  >
+                    Sign In to Global News
+                  </button>
+                )}
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </nav>
+    </header>
   );
 };
 
@@ -355,16 +482,27 @@ const ArticleCard = ({ article, lang }: { article: Article, lang: string }) => {
   );
 };
 
-const HomePage = ({ articles, lang }: { articles: Article[], lang: string }) => {
+const HomePage = ({ articles, lang, searchQuery }: { articles: Article[], lang: string, searchQuery: string }) => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const filteredArticles = useMemo(() => {
     let filtered = articles.filter(a => a.language === lang);
+    
     if (selectedCategory) {
       filtered = filtered.filter(a => a.category.toLowerCase() === selectedCategory.toLowerCase());
     }
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(a => 
+        a.headline.toLowerCase().includes(query) || 
+        a.summary.toLowerCase().includes(query) ||
+        a.category.toLowerCase().includes(query)
+      );
+    }
+
     return filtered;
-  }, [articles, lang, selectedCategory]);
+  }, [articles, lang, selectedCategory, searchQuery]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -456,6 +594,17 @@ const ArticleDetail = ({ articles }: { articles: Article[] }) => {
           {article.headline}
         </h1>
 
+        {article.isImage && article.mediaUrl && (
+          <div className="mb-12 rounded-3xl overflow-hidden shadow-2xl border border-gray-100">
+            <img 
+              src={article.mediaUrl} 
+              alt={article.headline}
+              className="w-full h-auto object-cover"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        )}
+
         {article.videoUrl && (
           <div className="mb-12 rounded-3xl overflow-hidden shadow-2xl bg-black aspect-video">
             <video 
@@ -506,8 +655,7 @@ const ArticleDetail = ({ articles }: { articles: Article[] }) => {
   );
 };
 
-const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] }) => {
-  const [rawNews, setRawNews] = useState<RawNews[]>([]);
+const AdminPage = ({ user, articles, rawNews }: { user: User | null, articles: Article[], rawNews: any[] }) => {
   const [isCollecting, setIsCollecting] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isVideoGenerating, setIsVideoGenerating] = useState<string | null>(null);
@@ -515,22 +663,24 @@ const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] 
   const [hasApiKey, setHasApiKey] = useState(false);
 
   useEffect(() => {
-    const q = query(collection(db, "raw_news"), where("processed", "==", false), limit(20));
-    const unsubRaw = onSnapshot(q, (snapshot) => {
-      setRawNews(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RawNews)));
-    });
-
-    // Check for API key for Veo
-    const checkApiKey = async () => {
+    const checkKey = async () => {
       if ((window as any).aistudio?.hasSelectedApiKey) {
         const has = await (window as any).aistudio.hasSelectedApiKey();
         setHasApiKey(has);
       }
     };
-    checkApiKey();
-
-    return () => unsubRaw();
+    checkKey();
   }, []);
+
+  // Auto-process news if any pending
+  useEffect(() => {
+    if (rawNews.length > 0 && !isProcessing && !isCollecting) {
+      const timer = setTimeout(() => {
+        processNews();
+      }, 5000); // Wait 5 seconds before auto-starting
+      return () => clearTimeout(timer);
+    }
+  }, [rawNews.length, isProcessing, isCollecting]);
 
   const addLog = (msg: string) => setLogs(prev => [msg, ...prev].slice(0, 50));
 
@@ -777,7 +927,7 @@ const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] 
 
   const collectNews = async () => {
     setIsCollecting(true);
-    addLog("Starting news collection (client-side)...");
+    addLog("Fetching latest news from server...");
     try {
       const res = await fetch("/api/fetch-rss");
       
@@ -793,42 +943,7 @@ const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] 
       
       if (data.status !== "success") throw new Error(data.message || "Failed to fetch RSS");
 
-      let addedCount = 0;
-      let skippedCount = 0;
-
-      for (const item of data.items) {
-        try {
-          // Check if already exists
-          const q = query(collection(db, "raw_news"), where("link", "==", item.link));
-          let snapshot;
-          try {
-            snapshot = await getDocs(q);
-          } catch (err) {
-            handleFirestoreError(err, OperationType.LIST, "raw_news");
-            return;
-          }
-          
-          if (snapshot.empty) {
-            try {
-              await addDoc(collection(db, "raw_news"), {
-                ...item,
-                processed: false,
-                createdAt: serverTimestamp(),
-              });
-            } catch (err) {
-              handleFirestoreError(err, OperationType.CREATE, "raw_news");
-            }
-            addedCount++;
-          } else {
-            skippedCount++;
-          }
-        } catch (err: any) {
-          console.error("Firestore write error:", err);
-          addLog(`Error adding ${item.title}: ${err.message}`);
-        }
-      }
-
-      addLog(`Collection complete. ${addedCount} new items added, ${skippedCount} items skipped.`);
+      addLog(`Server has ${data.items.length} pending items ready for processing.`);
     } catch (e: any) {
       addLog(`Error: ${e.message}`);
     } finally {
@@ -905,6 +1020,8 @@ const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] 
               language: lang,
               sourceName: item.source,
               sourceUrl: item.link,
+              mediaUrl: item.imageUrl || "", // Use extracted image from source
+              isImage: !!item.imageUrl,
               publishedAt: serverTimestamp(),
               slug,
               originalId: item.id
@@ -1086,7 +1203,9 @@ function AppContent() {
   const [user, setUser] = useState<User | null>(null);
   const [lang, setLang] = useState("en");
   const [articles, setArticles] = useState<Article[]>([]);
+  const [rawNews, setRawNews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (u) => setUser(u));
@@ -1113,9 +1232,17 @@ function AppContent() {
       handleFirestoreError(error, OperationType.LIST, "articles");
     });
 
+    const qRaw = query(collection(db, "raw_news"), where("processed", "==", false), orderBy("createdAt", "desc"), limit(50));
+    const unsubRaw = onSnapshot(qRaw, (snapshot) => {
+      setRawNews(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "raw_news");
+    });
+
     return () => {
       unsubAuth();
       unsubArticles();
+      unsubRaw();
     };
   }, []);
 
@@ -1133,29 +1260,67 @@ function AppContent() {
   return (
     <Router>
       <div className="min-h-screen bg-gray-50 font-sans selection:bg-blue-100 selection:text-blue-900">
-        <Navbar user={user} lang={lang} setLang={setLang} />
+        <Navbar 
+          user={user} 
+          lang={lang} 
+          setLang={setLang} 
+          searchQuery={searchQuery} 
+          setSearchQuery={setSearchQuery} 
+        />
         
         <main>
           <Routes>
-            <Route path="/" element={<HomePage articles={articles} lang={lang} />} />
+            <Route path="/" element={<HomePage articles={articles} lang={lang} searchQuery={searchQuery} />} />
             <Route path="/article/:slug" element={<ArticleDetail articles={articles} />} />
-            <Route path="/admin" element={<AdminPage user={user} articles={articles} />} />
+            <Route path="/admin" element={<AdminPage user={user} articles={articles} rawNews={rawNews} />} />
           </Routes>
         </main>
 
-        <footer className="bg-white border-t border-gray-200 py-12 mt-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <div className="flex justify-center items-center gap-2 mb-6">
-              <div className="bg-blue-600 p-2 rounded-lg">
-                <Newspaper className="text-white w-5 h-5" />
+        <footer className="bg-brand-ink text-white py-16 mt-20">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
+              <div className="col-span-1 md:col-span-2">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="bg-brand-accent p-2 rounded-sm">
+                    <Newspaper className="text-white w-6 h-6" />
+                  </div>
+                  <span className="text-2xl font-serif font-black tracking-tighter">GLOBAL NEWS</span>
+                </div>
+                <p className="text-gray-400 text-sm max-w-md leading-relaxed mb-6">
+                  An automated news portal powered by AI. We collect, rewrite, and translate news to provide a neutral perspective across multiple languages. Our mission is to bridge the gap between global events and local understanding.
+                </p>
+                <div className="flex gap-4">
+                  <button className="p-2 bg-gray-800 rounded-full hover:bg-brand-accent transition-colors"><Mail className="w-4 h-4" /></button>
+                  <button className="p-2 bg-gray-800 rounded-full hover:bg-brand-accent transition-colors"><Share2 className="w-4 h-4" /></button>
+                </div>
               </div>
-              <span className="text-lg font-bold text-gray-900">Global News AI</span>
+              
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-widest text-brand-accent mb-6">Sections</h4>
+                <ul className="space-y-4 text-sm text-gray-400">
+                  {CATEGORIES.slice(0, 5).map(cat => (
+                    <li key={cat.id}><Link to={`/?category=${cat.id}`} className="hover:text-white transition-colors">{lang === 'en' ? cat.en : cat.name}</Link></li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-widest text-brand-accent mb-6">Support</h4>
+                <ul className="space-y-4 text-sm text-gray-400">
+                  <li><Link to="/about" className="hover:text-white transition-colors">About Us</Link></li>
+                  <li><Link to="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
+                  <li><Link to="/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
+                  <li><Link to="/contact" className="hover:text-white transition-colors">Contact</Link></li>
+                </ul>
+              </div>
             </div>
-            <p className="text-gray-500 text-sm max-w-md mx-auto leading-relaxed">
-              An automated news portal powered by AI. We collect, rewrite, and translate news to provide a neutral perspective across multiple languages.
-            </p>
-            <div className="mt-8 pt-8 border-t border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-widest">
-              © 2026 Global News AI • Built with Gemini & Firebase
+            
+            <div className="pt-8 border-t border-gray-800 flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-bold text-gray-500 uppercase tracking-widest">
+              <div>© 2026 Global News AI • Built with Gemini & Firebase</div>
+              <div className="flex gap-6">
+                <span>English Edition</span>
+                <span>Nepali Edition</span>
+              </div>
             </div>
           </div>
         </footer>

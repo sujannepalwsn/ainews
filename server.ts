@@ -7,6 +7,9 @@ import Parser from "rss-parser";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
 
+import admin from "firebase-admin";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -16,6 +19,25 @@ if (ffmpegStatic) {
 }
 
 const firebaseConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "firebase-applet-config.json"), "utf-8"));
+
+// Force the project ID in the environment
+process.env.GOOGLE_CLOUD_PROJECT = firebaseConfig.projectId;
+process.env.GCLOUD_PROJECT = firebaseConfig.projectId;
+
+// Delete any existing apps to ensure a clean state
+if (admin.apps.length) {
+  for (const appInstance of admin.apps) {
+    if (appInstance) await appInstance.delete();
+  }
+}
+
+// Initialize Firebase Admin with the correct projectId
+const adminApp = admin.initializeApp({
+  projectId: firebaseConfig.projectId,
+});
+console.log("Admin App Project ID:", adminApp.options.projectId);
+
+const dbAdmin = getFirestore(adminApp, firebaseConfig.firestoreDatabaseId || "(default)");
 
 const app = express();
 const PORT = 3000;
@@ -133,28 +155,81 @@ app.post("/api/merge-video", async (req, res) => {
 });
 
 // API: Fetch RSS News (Proxy to avoid CORS and handle parsing)
-app.get("/api/fetch-rss", async (req, res) => {
+const fetchAndStoreNews = async () => {
+  console.log("Starting automated news collection...");
   try {
-    const allItems = [];
     for (const feed of RSS_FEEDS) {
       try {
+        console.log(`Fetching feed: ${feed.name}...`);
         const feedData = await parser.parseURL(feed.url);
+        console.log(`Found ${feedData.items.length} items in ${feed.name}`);
+        
         for (const item of feedData.items.slice(0, 10)) {
-          allItems.push({
-            title: item.title,
-            link: item.link,
-            pubDate: item.pubDate || new Date().toISOString(),
-            contentSnippet: item.contentSnippet || "",
-            source: feed.name,
-          });
+          // Extract image from various possible RSS fields
+          let imageUrl = "";
+          if (item.enclosure && item.enclosure.url) {
+            imageUrl = item.enclosure.url;
+          } else if (item.content) {
+            const imgMatch = item.content.match(/<img[^>]+src="([^">]+)"/);
+            if (imgMatch) imageUrl = imgMatch[1];
+          } else if (item.description) {
+            const imgMatch = item.description.match(/<img[^>]+src="([^">]+)"/);
+            if (imgMatch) imageUrl = imgMatch[1];
+          }
+
+          // Check if already exists in Firestore
+          try {
+            const snapshot = await dbAdmin.collection("raw_news")
+              .where("link", "==", item.link)
+              .get();
+
+            if (snapshot.empty) {
+              await dbAdmin.collection("raw_news").add({
+                title: item.title,
+                link: item.link,
+                pubDate: item.pubDate || new Date().toISOString(),
+                contentSnippet: item.contentSnippet || "",
+                source: feed.name,
+                imageUrl: imageUrl, // Extracted image
+                processed: false,
+                createdAt: FieldValue.serverTimestamp(),
+              });
+              console.log(`Added new item: ${item.title}`);
+            }
+          } catch (dbError) {
+            console.error(`Firestore error for item ${item.title}:`, dbError.message);
+            if (dbError.message.includes("PERMISSION_DENIED")) {
+              console.error("CRITICAL: Permission denied for Firestore. Check service account roles.");
+            }
+          }
         }
       } catch (feedError) {
         console.error(`Error fetching feed ${feed.name}:`, feedError.message);
       }
     }
-    res.json({ status: "success", items: allItems });
+    console.log("Automated news collection complete.");
   } catch (error) {
-    console.error("Error fetching RSS:", error);
+    console.error("Global error in news collection:", error);
+  }
+};
+
+// Run every 30 minutes
+setInterval(fetchAndStoreNews, 30 * 60 * 1000);
+// Run once on startup after a short delay
+setTimeout(fetchAndStoreNews, 5000);
+
+app.get("/api/fetch-rss", async (req, res) => {
+  try {
+    const snapshot = await dbAdmin.collection("raw_news")
+      .where("processed", "==", false)
+      .orderBy("createdAt", "desc")
+      .limit(50)
+      .get();
+    
+    const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json({ status: "success", items });
+  } catch (error) {
+    console.error("Error fetching RSS from DB:", error);
     res.status(500).json({ status: "error", message: error.message });
   }
 });
