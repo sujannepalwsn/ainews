@@ -159,6 +159,12 @@ app.get("/api/fetch-rss", async (req, res) => {
   }
 });
 
+// Global Error Handler for API routes
+app.use("/api", (err: any, req: any, res: any, next: any) => {
+  console.error("API Global Error:", err);
+  res.status(500).json({ status: "error", message: err.message || "Internal Server Error" });
+});
+
 // Vite middleware for development
 if (process.env.NODE_ENV !== "production") {
   const vite = await createViteServer({

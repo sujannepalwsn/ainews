@@ -616,7 +616,17 @@ const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] 
           isImage: true
         })
       });
-      const mergeData = await mergeRes.json();
+
+      let mergeData;
+      const contentType = mergeRes.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        mergeData = await mergeRes.json();
+      } else {
+        const text = await mergeRes.text();
+        console.error("Server returned non-JSON response:", text);
+        throw new Error(`Server error: ${mergeRes.status} ${mergeRes.statusText}`);
+      }
+
       if (mergeData.status === "success") {
         // Update Firestore on client-side
         try {
@@ -725,12 +735,23 @@ const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           audioUrl,
-          videoUrl: videoDataUrl,
+          mediaUrl: videoDataUrl, // Use mediaUrl instead of videoUrl
           articleId: article.id,
-          lang: article.language
+          lang: article.language,
+          isImage: false // Explicitly set isImage to false
         })
       });
-      const mergeData = await mergeRes.json();
+      
+      let mergeData;
+      const contentType = mergeRes.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        mergeData = await mergeRes.json();
+      } else {
+        const text = await mergeRes.text();
+        console.error("Server returned non-JSON response:", text);
+        throw new Error(`Server error: ${mergeRes.status} ${mergeRes.statusText}`);
+      }
+
       if (mergeData.status === "success") {
         // Update Firestore on client-side
         try {
@@ -759,7 +780,16 @@ const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] 
     addLog("Starting news collection (client-side)...");
     try {
       const res = await fetch("/api/fetch-rss");
-      const data = await res.json();
+      
+      let data;
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        console.error("Server returned non-JSON response:", text);
+        throw new Error(`Server error: ${res.status} ${res.statusText}`);
+      }
       
       if (data.status !== "success") throw new Error(data.message || "Failed to fetch RSS");
 
