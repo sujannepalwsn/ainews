@@ -99,6 +99,98 @@ const LANGUAGES = [
   { code: "hi", name: "हिन्दी" },
 ];
 
+// --- Error Handling ---
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      let errorMessage = "Something went wrong.";
+      try {
+        const parsed = JSON.parse(this.state.error.message);
+        if (parsed.error) errorMessage = `Firestore Error: ${parsed.error} (${parsed.operationType} on ${parsed.path})`;
+      } catch (e) {
+        errorMessage = this.state.error.message || errorMessage;
+      }
+
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+          <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full border border-red-100">
+            <ShieldAlert className="w-12 h-12 text-red-500 mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Application Error</h2>
+            <p className="text-gray-600 mb-6">{errorMessage}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all"
+            >
+              Reload Application
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // --- Components ---
 
 const ADMIN_EMAIL = "sujan1nepal.wsn@gmail.com";
@@ -555,12 +647,50 @@ const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] 
 
   const collectNews = async () => {
     setIsCollecting(true);
-    addLog("Starting news collection...");
+    addLog("Starting news collection (client-side)...");
     try {
-      const res = await fetch("/api/collect-news", { method: "POST" });
+      const res = await fetch("/api/fetch-rss");
       const data = await res.json();
-      addLog(`Collection complete. ${data.results?.filter((r: any) => r.status === 'added').length} new items added.`);
-    } catch (e) {
+      
+      if (data.status !== "success") throw new Error(data.message || "Failed to fetch RSS");
+
+      let addedCount = 0;
+      let skippedCount = 0;
+
+      for (const item of data.items) {
+        try {
+          // Check if already exists
+          const q = query(collection(db, "raw_news"), where("link", "==", item.link));
+          let snapshot;
+          try {
+            snapshot = await getDocs(q);
+          } catch (err) {
+            handleFirestoreError(err, OperationType.LIST, "raw_news");
+            return;
+          }
+          
+          if (snapshot.empty) {
+            try {
+              await addDoc(collection(db, "raw_news"), {
+                ...item,
+                processed: false,
+                createdAt: serverTimestamp(),
+              });
+            } catch (err) {
+              handleFirestoreError(err, OperationType.CREATE, "raw_news");
+            }
+            addedCount++;
+          } else {
+            skippedCount++;
+          }
+        } catch (err: any) {
+          console.error("Firestore write error:", err);
+          addLog(`Error adding ${item.title}: ${err.message}`);
+        }
+      }
+
+      addLog(`Collection complete. ${addedCount} new items added, ${skippedCount} items skipped.`);
+    } catch (e: any) {
       addLog(`Error: ${e.message}`);
     } finally {
       setIsCollecting(false);
@@ -630,19 +760,27 @@ const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] 
           const langData = data[lang];
           const slug = `${langData.headline.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`;
           
-          await addDoc(collection(db, "articles"), {
-            ...langData,
-            language: lang,
-            sourceName: item.source,
-            sourceUrl: item.link,
-            publishedAt: serverTimestamp(),
-            slug,
-            originalId: item.id
-          });
+          try {
+            await addDoc(collection(db, "articles"), {
+              ...langData,
+              language: lang,
+              sourceName: item.source,
+              sourceUrl: item.link,
+              publishedAt: serverTimestamp(),
+              slug,
+              originalId: item.id
+            });
+          } catch (err) {
+            handleFirestoreError(err, OperationType.CREATE, "articles");
+          }
         }
 
         // Mark as processed
-        await updateDoc(doc(db, "raw_news", item.id), { processed: true });
+        try {
+          await updateDoc(doc(db, "raw_news", item.id), { processed: true });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `raw_news/${item.id}`);
+        }
         addLog(`Success: ${item.title}`);
       } catch (e) {
         addLog(`Failed: ${item.title} - ${e.message}`);
@@ -784,6 +922,14 @@ const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] 
 // --- Main App ---
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  );
+}
+
+function AppContent() {
   const [user, setUser] = useState<User | null>(null);
   const [lang, setLang] = useState("en");
   const [articles, setArticles] = useState<Article[]>([]);
@@ -796,6 +942,8 @@ export default function App() {
     const unsubArticles = onSnapshot(q, (snapshot) => {
       setArticles(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Article)));
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "articles");
     });
 
     return () => {

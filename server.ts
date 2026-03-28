@@ -29,14 +29,45 @@ if (!fs.existsSync(MEDIA_DIR)) {
 // Serve media files
 app.use("/media", express.static(MEDIA_DIR));
 
-import { initializeApp as initializeAdminApp } from "firebase-admin/app";
+import { initializeApp as initializeAdminApp, getApps, getApp } from "firebase-admin/app";
 import { getFirestore as getAdminFirestore, FieldValue } from "firebase-admin/firestore";
 
-// Initialize Firebase Admin (uses default credentials in Cloud Run)
-const adminApp = initializeAdminApp({
-  projectId: firebaseConfig.projectId,
-});
+// Initialize Firebase Admin
+const adminApp = getApps().length === 0 
+  ? initializeAdminApp({
+      projectId: firebaseConfig.projectId,
+    })
+  : getApp();
+
 const db = getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId);
+
+// Test Firestore connection at startup
+(async () => {
+  try {
+    console.log(`Testing Firestore connection. Project: ${firebaseConfig.projectId}, Database: ${firebaseConfig.firestoreDatabaseId}`);
+    
+    // Try named database
+    try {
+      const snapshot = await db.collection("raw_news").limit(1).get();
+      console.log("Named database connection successful. Docs:", snapshot.size);
+    } catch (namedError) {
+      console.error("Named database access failed:", namedError.message);
+      
+      // Fallback/Diagnostic: Try default database
+      try {
+        const defaultDb = getAdminFirestore(adminApp);
+        const defaultSnapshot = await defaultDb.collection("raw_news").limit(1).get();
+        console.log("Default database access successful (fallback). Docs:", defaultSnapshot.size);
+        // If default works but named doesn't, we might be using the wrong database ID
+      } catch (defaultError) {
+        console.error("Default database access also failed:", defaultError.message);
+      }
+    }
+  } catch (error) {
+    console.error("CRITICAL: Firestore diagnostic failed.");
+    console.error("Error details:", error);
+  }
+})();
 
 const parser = new Parser();
 
@@ -96,35 +127,29 @@ app.post("/api/merge-video", async (req, res) => {
   }
 });
 
-// API: Trigger News Collection
-app.post("/api/collect-news", async (req, res) => {
+// API: Fetch RSS News (Proxy to avoid CORS and handle parsing)
+app.get("/api/fetch-rss", async (req, res) => {
   try {
-    const results = [];
+    const allItems = [];
     for (const feed of RSS_FEEDS) {
-      const feedData = await parser.parseURL(feed.url);
-      for (const item of feedData.items.slice(0, 5)) { // Limit to 5 per feed for now
-        // Check if already exists
-        const snapshot = await db.collection("raw_news").where("link", "==", item.link).get();
-        
-        if (snapshot.empty) {
-          await db.collection("raw_news").add({
+      try {
+        const feedData = await parser.parseURL(feed.url);
+        for (const item of feedData.items.slice(0, 10)) {
+          allItems.push({
             title: item.title,
             link: item.link,
             pubDate: item.pubDate || new Date().toISOString(),
             contentSnippet: item.contentSnippet || "",
             source: feed.name,
-            processed: false,
-            createdAt: FieldValue.serverTimestamp(),
           });
-          results.push({ title: item.title, status: "added" });
-        } else {
-          results.push({ title: item.title, status: "skipped" });
         }
+      } catch (feedError) {
+        console.error(`Error fetching feed ${feed.name}:`, feedError.message);
       }
     }
-    res.json({ status: "success", results });
+    res.json({ status: "success", items: allItems });
   } catch (error) {
-    console.error("Error collecting news:", error);
+    console.error("Error fetching RSS:", error);
     res.status(500).json({ status: "error", message: error.message });
   }
 });
