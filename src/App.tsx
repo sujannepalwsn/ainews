@@ -13,7 +13,8 @@ import {
   doc, 
   getDocs, 
   serverTimestamp,
-  getDoc
+  getDoc,
+  getDocFromServer
 } from "firebase/firestore";
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from "firebase/auth";
 import { db, auth } from "./firebase";
@@ -617,7 +618,16 @@ const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] 
       });
       const mergeData = await mergeRes.json();
       if (mergeData.status === "success") {
-        addLog(`Success! Free Video ready: ${mergeData.videoUrl}`);
+        // Update Firestore on client-side
+        try {
+          await updateDoc(doc(db, "articles", article.id), {
+            videoUrl: mergeData.videoUrl,
+            videoGeneratedAt: serverTimestamp()
+          });
+          addLog(`Success! Free Video ready: ${mergeData.videoUrl}`);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `articles/${article.id}`);
+        }
       } else {
         throw new Error(mergeData.error || "Merge failed");
       }
@@ -722,7 +732,16 @@ const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] 
       });
       const mergeData = await mergeRes.json();
       if (mergeData.status === "success") {
-        addLog(`Success! Video ready: ${mergeData.videoUrl}`);
+        // Update Firestore on client-side
+        try {
+          await updateDoc(doc(db, "articles", article.id), {
+            videoUrl: mergeData.videoUrl,
+            videoGeneratedAt: serverTimestamp()
+          });
+          addLog(`Success! Video ready: ${mergeData.videoUrl}`);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `articles/${article.id}`);
+        }
       } else {
         throw new Error(mergeData.error || "Merge failed");
       }
@@ -1042,6 +1061,20 @@ function AppContent() {
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (u) => setUser(u));
     
+    // Test connection to Firestore
+    const testConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+        console.log("Firestore connection test successful.");
+      } catch (error) {
+        if(error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration. The client is offline.");
+        }
+        // Skip logging for other errors, as this is simply a connection test.
+      }
+    };
+    testConnection();
+
     const q = query(collection(db, "articles"), orderBy("publishedAt", "desc"), limit(50));
     const unsubArticles = onSnapshot(q, (snapshot) => {
       setArticles(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Article)));

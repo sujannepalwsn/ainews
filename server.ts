@@ -29,46 +29,6 @@ if (!fs.existsSync(MEDIA_DIR)) {
 // Serve media files
 app.use("/media", express.static(MEDIA_DIR));
 
-import { initializeApp as initializeAdminApp, getApps, getApp } from "firebase-admin/app";
-import { getFirestore as getAdminFirestore, FieldValue } from "firebase-admin/firestore";
-
-// Initialize Firebase Admin
-const adminApp = getApps().length === 0 
-  ? initializeAdminApp({
-      projectId: firebaseConfig.projectId,
-    })
-  : getApp();
-
-const db = getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId);
-
-// Test Firestore connection at startup
-(async () => {
-  try {
-    console.log(`Testing Firestore connection. Project: ${firebaseConfig.projectId}, Database: ${firebaseConfig.firestoreDatabaseId}`);
-    
-    // Try named database
-    try {
-      const snapshot = await db.collection("raw_news").limit(1).get();
-      console.log("Named database connection successful. Docs:", snapshot.size);
-    } catch (namedError) {
-      console.error("Named database access failed:", namedError.message);
-      
-      // Fallback/Diagnostic: Try default database
-      try {
-        const defaultDb = getAdminFirestore(adminApp);
-        const defaultSnapshot = await defaultDb.collection("raw_news").limit(1).get();
-        console.log("Default database access successful (fallback). Docs:", defaultSnapshot.size);
-        // If default works but named doesn't, we might be using the wrong database ID
-      } catch (defaultError) {
-        console.error("Default database access also failed:", defaultError.message);
-      }
-    }
-  } catch (error) {
-    console.error("CRITICAL: Firestore diagnostic failed.");
-    console.error("Error details:", error);
-  }
-})();
-
 const parser = new Parser();
 
 const RSS_FEEDS = [
@@ -79,7 +39,8 @@ const RSS_FEEDS = [
   { name: "Google News Entertainment", url: "https://news.google.com/rss/search?q=entertainment&hl=en-US&gl=US&ceid=US:en" },
 ];
 
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // API: Merge Audio and Video/Image
 app.post("/api/merge-video", async (req, res) => {
@@ -90,16 +51,35 @@ app.post("/api/merge-video", async (req, res) => {
 
   const outputFilename = `news-${articleId}-${lang}-${Date.now()}.mp4`;
   const outputPath = path.join(MEDIA_DIR, outputFilename);
+  
+  // Temporary file paths to avoid ENAMETOOLONG
+  const tempDir = path.join(__dirname, "temp");
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+  
+  const audioTempPath = path.join(tempDir, `audio-${articleId}-${Date.now()}.mp3`);
+  const mediaTempPath = path.join(tempDir, `media-${articleId}-${Date.now()}${isImage ? '.png' : '.mp4'}`);
 
   try {
+    // Helper to save data URL to file
+    const saveDataUrlToFile = (dataUrl: string, filePath: string) => {
+      const base64Data = dataUrl.split(";base64,").pop();
+      if (!base64Data) throw new Error("Invalid data URL");
+      fs.writeFileSync(filePath, base64Data, { encoding: "base64" });
+    };
+
+    saveDataUrlToFile(audioUrl, audioTempPath);
+    saveDataUrlToFile(mediaUrl, mediaTempPath);
+
     let command = ffmpeg();
 
     if (isImage) {
       // Handle Image + Audio
       command
-        .input(mediaUrl)
+        .input(mediaTempPath)
         .inputOptions("-loop 1")
-        .input(audioUrl)
+        .input(audioTempPath)
         .outputOptions("-c:v libx264") // Encode image to video
         .outputOptions("-tune stillimage")
         .outputOptions("-c:a aac")
@@ -109,8 +89,8 @@ app.post("/api/merge-video", async (req, res) => {
     } else {
       // Handle Video + Audio
       command
-        .input(mediaUrl)
-        .input(audioUrl)
+        .input(mediaTempPath)
+        .input(audioTempPath)
         .outputOptions("-c:v copy") // Copy video stream
         .outputOptions("-c:a aac")   // Encode audio to AAC
         .outputOptions("-map 0:v:0") // Take first video stream from first input
@@ -118,28 +98,36 @@ app.post("/api/merge-video", async (req, res) => {
         .outputOptions("-shortest");
     }
 
+    const cleanup = () => {
+      try {
+        if (fs.existsSync(audioTempPath)) fs.unlinkSync(audioTempPath);
+        if (fs.existsSync(mediaTempPath)) fs.unlinkSync(mediaTempPath);
+      } catch (e) {
+        console.error("Cleanup error:", e);
+      }
+    };
+
     command
       .on("start", (cmd) => console.log("FFmpeg started:", cmd))
       .on("error", (err) => {
         console.error("FFmpeg error:", err);
+        cleanup();
         res.status(500).json({ error: err.message });
       })
       .on("end", async () => {
         console.log("FFmpeg finished");
+        cleanup();
         const publicUrl = `/media/${outputFilename}`;
-        
-        // Update article with video URL
-        const articleRef = db.collection("articles").doc(articleId);
-        await articleRef.update({
-          videoUrl: publicUrl,
-          videoGeneratedAt: FieldValue.serverTimestamp()
-        });
-
         res.json({ status: "success", videoUrl: publicUrl });
       })
       .save(outputPath);
   } catch (error) {
     console.error("Error merging media:", error);
+    // Cleanup if write failed
+    try {
+      if (fs.existsSync(audioTempPath)) fs.unlinkSync(audioTempPath);
+      if (fs.existsSync(mediaTempPath)) fs.unlinkSync(mediaTempPath);
+    } catch (e) {}
     res.status(500).json({ error: error.message });
   }
 });
