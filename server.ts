@@ -81,10 +81,10 @@ const RSS_FEEDS = [
 
 app.use(express.json());
 
-// API: Merge Audio and Video
+// API: Merge Audio and Video/Image
 app.post("/api/merge-video", async (req, res) => {
-  const { audioUrl, videoUrl, articleId, lang } = req.body;
-  if (!audioUrl || !videoUrl || !articleId) {
+  const { audioUrl, mediaUrl, articleId, lang, isImage } = req.body;
+  if (!audioUrl || !mediaUrl || !articleId) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
@@ -92,16 +92,33 @@ app.post("/api/merge-video", async (req, res) => {
   const outputPath = path.join(MEDIA_DIR, outputFilename);
 
   try {
-    // We need to download the files first or pass URLs directly if FFmpeg supports it
-    // FFmpeg usually supports URLs directly
-    ffmpeg()
-      .input(videoUrl)
-      .input(audioUrl)
-      .outputOptions("-c:v copy") // Copy video stream
-      .outputOptions("-c:a aac")   // Encode audio to AAC
-      .outputOptions("-map 0:v:0") // Take first video stream from first input
-      .outputOptions("-map 1:a:0") // Take first audio stream from second input
-      .outputOptions("-shortest")  // End when the shortest stream ends
+    let command = ffmpeg();
+
+    if (isImage) {
+      // Handle Image + Audio
+      command
+        .input(mediaUrl)
+        .inputOptions("-loop 1")
+        .input(audioUrl)
+        .outputOptions("-c:v libx264") // Encode image to video
+        .outputOptions("-tune stillimage")
+        .outputOptions("-c:a aac")
+        .outputOptions("-b:a 192k")
+        .outputOptions("-pix_fmt yuv420p")
+        .outputOptions("-shortest");
+    } else {
+      // Handle Video + Audio
+      command
+        .input(mediaUrl)
+        .input(audioUrl)
+        .outputOptions("-c:v copy") // Copy video stream
+        .outputOptions("-c:a aac")   // Encode audio to AAC
+        .outputOptions("-map 0:v:0") // Take first video stream from first input
+        .outputOptions("-map 1:a:0") // Take first audio stream from second input
+        .outputOptions("-shortest");
+    }
+
+    command
       .on("start", (cmd) => console.log("FFmpeg started:", cmd))
       .on("error", (err) => {
         console.error("FFmpeg error:", err);
@@ -122,7 +139,7 @@ app.post("/api/merge-video", async (req, res) => {
       })
       .save(outputPath);
   } catch (error) {
-    console.error("Error merging video:", error);
+    console.error("Error merging media:", error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -540,6 +540,96 @@ const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] 
     }
   };
 
+  const generateFreeVideo = async (article: Article) => {
+    setIsVideoGenerating(article.id);
+    addLog(`Starting FREE video generation for: ${article.headline}`);
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+
+      // 1. Generate Script
+      addLog("Generating news script...");
+      const scriptPrompt = `
+        Convert this news article into a natural, engaging news anchor script for a 30-40 second video.
+        Article: ${article.headline}. ${article.summary}.
+        Language: ${article.language === 'ne' ? 'Nepali' : article.language === 'hi' ? 'Hindi' : 'English'}
+        Format: Just the spoken text, no stage directions.
+      `;
+      const scriptRes = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [{ parts: [{ text: scriptPrompt }] }]
+      });
+      const script = scriptRes.text;
+      addLog("Script generated.");
+
+      // 2. Generate Audio (TTS)
+      addLog("Generating voice narration...");
+      const ttsRes = await ai.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text: script }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
+          }
+        }
+      });
+      const audioBase64 = ttsRes.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (!audioBase64) throw new Error("Failed to generate audio");
+      const audioUrl = `data:audio/mp3;base64,${audioBase64}`;
+      addLog("Audio generated.");
+
+      // 3. Generate Static Anchor Image (Free)
+      addLog("Generating AI news anchor image (Free)...");
+      const imageRes = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+          parts: [
+            {
+              text: 'A professional news anchor in a modern high-tech news studio, looking directly at the camera, neutral expression, professional attire. High quality, photorealistic.',
+            },
+          ],
+        },
+      });
+      
+      let anchorImageData = "";
+      for (const part of imageRes.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+          anchorImageData = `data:image/png;base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+      if (!anchorImageData) throw new Error("Failed to generate anchor image");
+      addLog("Anchor image generated.");
+
+      // 4. Merge Audio and Image (Server-side)
+      addLog("Merging audio and image into video...");
+      const mergeRes = await fetch("/api/merge-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audioUrl,
+          mediaUrl: anchorImageData,
+          articleId: article.id,
+          lang: article.language,
+          isImage: true
+        })
+      });
+      const mergeData = await mergeRes.json();
+      if (mergeData.status === "success") {
+        addLog(`Success! Free Video ready: ${mergeData.videoUrl}`);
+      } else {
+        throw new Error(mergeData.error || "Merge failed");
+      }
+
+    } catch (e: any) {
+      addLog(`Error: ${e.message}`);
+      console.error(e);
+    } finally {
+      setIsVideoGenerating(null);
+    }
+  };
+
   const generateVideo = async (article: Article) => {
     if (!hasApiKey) {
       addLog("Error: Please select an API key first for video generation.");
@@ -845,25 +935,39 @@ const AdminPage = ({ user, articles }: { user: User | null, articles: Article[] 
                       </div>
                       <p className="text-sm text-gray-500 line-clamp-1">{article.summary}</p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                       {article.videoUrl ? (
                         <div className="flex items-center gap-2 text-green-600 bg-green-50 px-3 py-1.5 rounded-full text-xs font-bold">
                           <Video className="w-4 h-4" />
                           Video Ready
                         </div>
                       ) : (
-                        <button
-                          onClick={() => generateVideo(article)}
-                          disabled={!!isVideoGenerating}
-                          className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-gray-800 disabled:opacity-50 transition-all"
-                        >
-                          {isVideoGenerating === article.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Video className="w-4 h-4" />
-                          )}
-                          Generate Video
-                        </button>
+                        <>
+                          <button
+                            onClick={() => generateFreeVideo(article)}
+                            disabled={!!isVideoGenerating}
+                            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition-all"
+                          >
+                            {isVideoGenerating === article.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Video className="w-4 h-4" />
+                            )}
+                            Generate Free Video
+                          </button>
+                          <button
+                            onClick={() => generateVideo(article)}
+                            disabled={!!isVideoGenerating}
+                            className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-gray-800 disabled:opacity-50 transition-all"
+                          >
+                            {isVideoGenerating === article.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Video className="w-4 h-4" />
+                            )}
+                            Generate Video (Veo)
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
