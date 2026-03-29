@@ -6,39 +6,82 @@
   --font-serif: "Playfair Display", serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   
-  --color-brand-primary: #1a1a1a;
-  --color-brand-accent: #3b82f6;
-  --color-brand-paper: #fcfcfc;
-  --color-brand-ink: #111111;
-  --color-brand-muted: #666666;
-  --color-brand-line: #eeeeee;
+  /* 2026 Immersive Minimalism Palette */
+  --color-brand-limestone: #F5F2ED; /* Soft warm neutral */
+  --color-brand-ink: #141414;      /* Deep black for text */
+  --color-brand-accent: #3B82F6;   /* Trustworthy blue */
+  --color-brand-muted: #8E8E8E;    /* Muted secondary text */
+  --color-brand-line: rgba(20, 20, 20, 0.08); /* Subtle dividers */
+  
+  /* Dark Mode Palette */
+  --color-dark-bg: #0A0A0A;
+  --color-dark-surface: #141414;
+  --color-dark-ink: #E0E0E0;
+  --color-dark-muted: #808080;
+  --color-dark-line: rgba(255, 255, 255, 0.1);
 }
 
 @layer base {
+  :root {
+    --bg: var(--color-brand-limestone);
+    --ink: var(--color-brand-ink);
+    --line: var(--color-brand-line);
+    --muted: var(--color-brand-muted);
+  }
+
+  .dark {
+    --bg: var(--color-dark-bg);
+    --ink: var(--color-dark-ink);
+    --line: var(--color-dark-line);
+    --muted: var(--color-dark-muted);
+  }
+
   body {
-    @apply bg-brand-paper text-brand-ink font-sans antialiased;
+    @apply bg-[var(--bg)] text-[var(--ink)] font-sans antialiased transition-colors duration-300;
   }
   
   h1, h2, h3, h4, h5, h6 {
-    @apply font-serif font-bold tracking-tight;
+    @apply font-serif font-bold tracking-tight text-[var(--ink)];
+  }
+
+  hr {
+    @apply border-[var(--line)];
   }
 }
 
-/* Custom News Layout Utilities */
-.news-grid {
+/* Bento Grid Utilities */
+.bento-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
+  grid-auto-rows: minmax(100px, auto);
   gap: 1.5rem;
 }
 
-.news-card-shadow {
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.02);
+.bento-item {
+  @apply bg-white dark:bg-dark-surface border border-[var(--line)] rounded-3xl overflow-hidden transition-all duration-300;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
 }
 
-.news-card-shadow:hover {
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+.bento-item:hover {
+  @apply transform -translate-y-1;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
 }
 
+/* Kinetic Typography & Motion */
+.kinetic-text {
+  @apply inline-block transition-transform duration-500 hover:scale-105;
+}
+
+/* Hide scrollbar but keep functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom Utilities */
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -51,26 +94,4 @@
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-/* Editorial Typography */
-.editorial-body {
-  @apply font-serif text-lg leading-relaxed text-gray-800;
-}
-
-.editorial-body p {
-  @apply mb-6;
-}
-
-.editorial-body h2 {
-  @apply text-2xl mt-10 mb-4;
-}
-
-/* Hide scrollbar but keep functionality */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
 }

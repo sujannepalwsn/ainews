@@ -45,7 +45,13 @@ service cloud.firestore {
 
     // Raw News: Only admin can read and write
     match /raw_news/{newsId} {
-      allow read, create, update, delete: if isAdmin() && (request.method == 'get' || request.method == 'list' || isValidRawNews(request.resource.data));
+      allow read, delete: if isAdmin();
+      allow create, update: if isAdmin() && isValidRawNews(request.resource.data);
+    }
+
+    // Test connection
+    match /test/connection {
+      allow read: if true;
     }
 
     // Default deny

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { BrowserRouter as Router, Routes, Route, Link, useParams, useNavigate } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { 
   collection, 
@@ -99,6 +99,9 @@ const CATEGORIES = [
   { id: "science", name: "विज्ञान", en: "Science", icon: FlaskConical },
   { id: "sports", name: "खेलकुद", en: "Sports", icon: Trophy },
   { id: "entertainment", name: "मनोरञ्जन", en: "Entertainment", icon: Clapperboard },
+  { id: "education", name: "शिक्षा", en: "Education", icon: GraduationCap },
+  { id: "environment", name: "वातावरण", en: "Environment", icon: Leaf },
+  { id: "crime", name: "अपराध", en: "Crime", icon: ShieldAlert },
   { id: "lifestyle", name: "जीवनशैली", en: "Lifestyle", icon: Smile },
 ];
 
@@ -200,6 +203,40 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   }
 }
 
+// --- Theme Context ---
+const ThemeContext = React.createContext<{ theme: 'light' | 'dark', toggleTheme: () => void }>({ theme: 'light', toggleTheme: () => {} });
+
+const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('theme');
+      if (saved) return saved as 'light' | 'dark';
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return 'light';
+  });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+};
+
+const useTheme = () => React.useContext(ThemeContext);
+
 // --- Components ---
 
 const ADMIN_EMAIL = "sujan1nepal.wsn@gmail.com";
@@ -219,60 +256,89 @@ const Navbar = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
   const isAdmin = user?.email === ADMIN_EMAIL;
+
+  // Prevent body scroll when menu is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => { document.body.style.overflow = 'unset'; };
+  }, [isOpen]);
 
   return (
     <header className="sticky top-0 z-50 w-full">
-      {/* Top Bar */}
-      <div className="bg-brand-primary text-white py-1 px-4 text-[10px] font-bold uppercase tracking-[0.2em] text-center">
-        Breaking: AI-Powered Global News Network • {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+      {/* Dynamic Breaking News Ticker */}
+      <div className="bg-brand-accent text-white py-2 px-4 overflow-hidden whitespace-nowrap">
+        <div className="inline-block animate-marquee hover:pause">
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] mx-8">
+            Breaking: AI-Powered Global News Network • {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] mx-8">
+            Live Updates: Real-time translation active for 12+ languages
+          </span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] mx-8">
+            Trending: Global Markets react to new AI regulations
+          </span>
+        </div>
       </div>
       
       {/* Main Nav */}
-      <nav className="bg-white/90 backdrop-blur-xl border-b border-brand-line">
+      <nav className="bg-[var(--bg)]/80 backdrop-blur-2xl border-b border-[var(--line)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20 items-center">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-3 group">
-              <div className="bg-brand-ink p-2.5 rounded-sm group-hover:bg-brand-accent transition-colors">
-                <Newspaper className="text-white w-6 h-6" />
+              <div className="bg-[var(--ink)] p-2.5 rounded-2xl group-hover:bg-brand-accent transition-all duration-500 rotate-3 group-hover:rotate-0">
+                <Newspaper className="text-[var(--bg)] w-6 h-6" />
               </div>
               <div className="flex flex-col">
-                <span className="text-2xl font-serif font-black tracking-tighter text-brand-ink leading-none">GLOBAL</span>
-                <span className="text-[10px] font-bold tracking-[0.3em] text-brand-muted leading-none mt-1">NEWS AI</span>
+                <span className="text-2xl font-serif font-black tracking-tighter text-[var(--ink)] leading-none">GLOBAL</span>
+                <span className="text-[10px] font-bold tracking-[0.3em] text-[var(--muted)] leading-none mt-1">NEWS AI</span>
               </div>
             </Link>
 
             {/* Desktop Navigation */}
             <div className="hidden lg:flex items-center gap-8">
-              {CATEGORIES.slice(0, 5).map((cat) => (
+              {CATEGORIES.slice(0, 6).map((cat) => (
                 <Link 
                   key={cat.id} 
-                  to={`/?category=${cat.id}`}
-                  className="text-xs font-bold uppercase tracking-widest text-brand-muted hover:text-brand-accent transition-colors"
+                  to={`/category/${cat.id}`}
+                  className="text-xs font-bold uppercase tracking-widest text-[var(--muted)] hover:text-brand-accent transition-colors relative group"
                 >
                   {lang === 'en' ? cat.en : cat.name}
+                  <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-brand-accent transition-all duration-300 group-hover:w-full" />
                 </Link>
               ))}
-              <div className="h-4 w-px bg-brand-line mx-2" />
+              <div className="h-4 w-px bg-[var(--line)] mx-2" />
               <button 
                 onClick={() => setIsSearchOpen(!isSearchOpen)}
-                className="p-2 text-brand-muted hover:text-brand-ink transition-colors"
+                className="p-2 text-[var(--muted)] hover:text-[var(--ink)] transition-colors"
               >
                 <Search className="w-5 h-5" />
               </button>
             </div>
 
-            {/* User & Lang */}
+            {/* User & Lang & Theme */}
             <div className="hidden md:flex items-center gap-6">
-              <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-full border border-brand-line">
+              <button 
+                onClick={toggleTheme}
+                className="p-2 text-[var(--muted)] hover:text-[var(--ink)] transition-colors bg-[var(--line)] rounded-full"
+              >
+                {theme === 'light' ? <Clock className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
+              </button>
+
+              <div className="flex items-center gap-1 bg-[var(--line)] p-1 rounded-full">
                 {LANGUAGES.map((l) => (
                   <button
                     key={l.code}
                     onClick={() => setLang(l.code)}
                     className={cn(
                       "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all",
-                      lang === l.code ? "bg-white text-brand-accent shadow-sm" : "text-brand-muted hover:text-brand-ink"
+                      lang === l.code ? "bg-[var(--bg)] text-brand-accent shadow-sm" : "text-[var(--muted)] hover:text-[var(--ink)]"
                     )}
                   >
                     {l.name}
@@ -283,11 +349,11 @@ const Navbar = ({
               {user ? (
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2 group cursor-pointer">
-                    <img src={user.photoURL || ""} alt="" className="w-8 h-8 rounded-full border border-brand-line" />
-                    <ChevronDown className="w-4 h-4 text-brand-muted group-hover:text-brand-ink" />
+                    <img src={user.photoURL || ""} alt="" className="w-8 h-8 rounded-full border border-[var(--line)]" />
+                    <ChevronDown className="w-4 h-4 text-[var(--muted)] group-hover:text-[var(--ink)]" />
                   </div>
                   {isAdmin && (
-                    <Link to="/admin" className="bg-brand-ink text-white p-2 rounded-sm hover:bg-brand-accent transition-colors">
+                    <Link to="/admin" className="bg-[var(--ink)] text-[var(--bg)] p-2 rounded-xl hover:bg-brand-accent transition-colors">
                       <Settings className="w-4 h-4" />
                     </Link>
                   )}
@@ -296,7 +362,7 @@ const Navbar = ({
               ) : (
                 <button
                   onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
-                  className="bg-brand-ink text-white px-6 py-2.5 rounded-sm text-xs font-bold uppercase tracking-widest hover:bg-brand-accent transition-all"
+                  className="bg-[var(--ink)] text-[var(--bg)] px-6 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-widest hover:bg-brand-accent transition-all"
                 >
                   Sign In
                 </button>
@@ -305,10 +371,10 @@ const Navbar = ({
 
             {/* Mobile Menu Button */}
             <div className="lg:hidden flex items-center gap-4">
-              <button onClick={() => setIsSearchOpen(!isSearchOpen)} className="p-2 text-brand-muted">
+              <button onClick={() => setIsSearchOpen(!isSearchOpen)} className="p-2 text-[var(--muted)]">
                 <Search className="w-5 h-5" />
               </button>
-              <button onClick={() => setIsOpen(!isOpen)} className="p-2 text-brand-ink">
+              <button onClick={() => setIsOpen(!isOpen)} className="p-2 text-[var(--ink)]">
                 {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
             </div>
@@ -322,21 +388,21 @@ const Navbar = ({
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="absolute top-full left-0 w-full bg-white border-b border-brand-line p-4 shadow-2xl"
+              className="absolute top-full left-0 w-full bg-[var(--bg)] border-b border-[var(--line)] p-4 shadow-2xl"
             >
               <div className="max-w-3xl mx-auto relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-muted" />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--muted)]" />
                 <input 
                   type="text"
                   placeholder="Search for news, topics, or keywords..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-lg focus:ring-2 focus:ring-brand-accent text-lg font-serif"
+                  className="w-full pl-12 pr-4 py-4 bg-[var(--line)] border-none rounded-2xl focus:ring-2 focus:ring-brand-accent text-lg font-serif text-[var(--ink)]"
                   autoFocus
                 />
                 <button 
                   onClick={() => setIsSearchOpen(false)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-ink"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--ink)]"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -353,17 +419,17 @@ const Navbar = ({
             initial={{ opacity: 0, x: "100%" }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: "100%" }}
-            className="fixed inset-0 z-[60] bg-white lg:hidden"
+            className="fixed inset-0 z-[60] bg-[var(--bg)] lg:hidden"
           >
-            <div className="p-6">
+            <div className="p-6 h-full overflow-y-auto pb-32">
               <div className="flex justify-between items-center mb-12">
                 <div className="flex items-center gap-3">
-                  <div className="bg-brand-ink p-2 rounded-sm">
-                    <Newspaper className="text-white w-6 h-6" />
+                  <div className="bg-[var(--ink)] p-2 rounded-2xl">
+                    <Newspaper className="text-[var(--bg)] w-6 h-6" />
                   </div>
-                  <span className="text-xl font-serif font-black tracking-tighter">GLOBAL NEWS</span>
+                  <span className="text-xl font-serif font-black tracking-tighter text-[var(--ink)]">GLOBAL NEWS</span>
                 </div>
-                <button onClick={() => setIsOpen(false)} className="p-2 text-brand-ink">
+                <button onClick={() => setIsOpen(false)} className="p-2 text-[var(--ink)]">
                   <X className="w-8 h-8" />
                 </button>
               </div>
@@ -373,26 +439,26 @@ const Navbar = ({
                   {CATEGORIES.map((cat) => (
                     <Link 
                       key={cat.id} 
-                      to={`/?category=${cat.id}`}
+                      to={`/category/${cat.id}`}
                       onClick={() => setIsOpen(false)}
-                      className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg"
+                      className="flex items-center gap-3 p-4 bg-[var(--line)] rounded-2xl"
                     >
                       <cat.icon className="w-5 h-5 text-brand-accent" />
-                      <span className="text-sm font-bold uppercase tracking-widest">{lang === 'en' ? cat.en : cat.name}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--ink)]">{lang === 'en' ? cat.en : cat.name}</span>
                     </Link>
                   ))}
                 </div>
 
-                <div className="pt-8 border-t border-brand-line">
-                  <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-muted mb-4">Edition</h4>
+                <div className="pt-8 border-t border-[var(--line)]">
+                  <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--muted)] mb-4">Edition</h4>
                   <div className="flex gap-2">
                     {LANGUAGES.map((l) => (
                       <button
                         key={l.code}
                         onClick={() => { setLang(l.code); setIsOpen(false); }}
                         className={cn(
-                          "flex-1 py-3 rounded-lg text-xs font-bold uppercase tracking-widest border",
-                          lang === l.code ? "bg-brand-ink text-white border-brand-ink" : "border-brand-line text-brand-muted"
+                          "flex-1 py-3 rounded-2xl text-xs font-bold uppercase tracking-widest border",
+                          lang === l.code ? "bg-[var(--ink)] text-[var(--bg)] border-[var(--ink)]" : "border-[var(--line)] text-[var(--muted)]"
                         )}
                       >
                         {l.name}
@@ -402,12 +468,12 @@ const Navbar = ({
                 </div>
 
                 {user ? (
-                  <div className="pt-8 border-t border-brand-line">
+                  <div className="pt-8 border-t border-[var(--line)]">
                     <div className="flex items-center gap-4 mb-6">
                       <img src={user.photoURL || ""} alt="" className="w-12 h-12 rounded-full" />
                       <div>
-                        <p className="font-bold text-brand-ink">{user.displayName}</p>
-                        <p className="text-xs text-brand-muted">{user.email}</p>
+                        <p className="font-bold text-[var(--ink)]">{user.displayName}</p>
+                        <p className="text-xs text-[var(--muted)]">{user.email}</p>
                       </div>
                     </div>
                     <div className="space-y-3">
@@ -415,19 +481,19 @@ const Navbar = ({
                         <Link 
                           to="/admin" 
                           onClick={() => setIsOpen(false)}
-                          className="flex items-center justify-center gap-2 w-full py-4 bg-brand-ink text-white rounded-lg font-bold uppercase tracking-widest"
+                          className="flex items-center justify-center gap-2 w-full py-4 bg-[var(--ink)] text-[var(--bg)] rounded-2xl font-bold uppercase tracking-widest"
                         >
                           <Settings className="w-5 h-5" />
                           Admin Dashboard
                         </Link>
                       )}
-                      <button onClick={() => signOut(auth)} className="w-full py-4 border border-red-200 text-red-500 rounded-lg font-bold uppercase tracking-widest">Sign Out</button>
+                      <button onClick={() => signOut(auth)} className="w-full py-4 border border-red-200 text-red-500 rounded-2xl font-bold uppercase tracking-widest">Sign Out</button>
                     </div>
                   </div>
                 ) : (
                   <button
                     onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
-                    className="w-full py-4 bg-brand-ink text-white rounded-lg font-bold uppercase tracking-widest"
+                    className="w-full py-4 bg-[var(--ink)] text-[var(--bg)] rounded-2xl font-bold uppercase tracking-widest"
                   >
                     Sign In to Global News
                   </button>
@@ -441,55 +507,189 @@ const Navbar = ({
   );
 };
 
-const ArticleCard = ({ article, lang }: { article: Article, lang: string }) => {
+const BottomNav = ({ lang, user }: { lang: string, user: User | null }) => {
+  const isAdmin = user?.email === ADMIN_EMAIL;
+  
+  return (
+    <div className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md">
+      <div className="bg-[var(--bg)]/80 backdrop-blur-2xl border border-[var(--line)] rounded-full px-6 py-4 flex justify-between items-center shadow-2xl">
+        <Link to="/" className="p-2 text-brand-accent">
+          <Newspaper className="w-6 h-6" />
+        </Link>
+        <Link to="/category/world" className="p-2 text-[var(--muted)]">
+          <Globe className="w-6 h-6" />
+        </Link>
+        <Link to="/category/technology" className="p-2 text-[var(--muted)]">
+          <Cpu className="w-6 h-6" />
+        </Link>
+        {user ? (
+          isAdmin ? (
+            <Link to="/admin" className="p-2 text-brand-accent bg-brand-accent/10 rounded-full">
+              <Settings className="w-6 h-6" />
+            </Link>
+          ) : (
+            <Link to="/bookmarks" className="p-2 text-brand-accent">
+              <Bookmark className="w-6 h-6 fill-current" />
+            </Link>
+          )
+        ) : (
+          <button 
+            onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
+            className="p-2 text-[var(--muted)]"
+          >
+            <Mail className="w-6 h-6" />
+          </button>
+        )}
+        <Link to="/bookmarks" className="p-2 text-[var(--muted)]">
+          <Bookmark className="w-6 h-6" />
+        </Link>
+      </div>
+    </div>
+  );
+};
+
+const ArticleCard = ({ article, lang, featured = false }: { article: Article, lang: string, featured?: boolean }) => {
   const publishedAt = article.publishedAt?.toDate ? article.publishedAt.toDate() : new Date(article.publishedAt);
+  const [isBookmarked, setIsBookmarked] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('bookmarks');
+    if (saved) {
+      const ids = JSON.parse(saved);
+      setIsBookmarked(ids.includes(article.id));
+    }
+  }, [article.id]);
+
+  const toggleBookmark = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const saved = localStorage.getItem('bookmarks');
+    let ids = saved ? JSON.parse(saved) : [];
+    if (isBookmarked) {
+      ids = ids.filter((id: string) => id !== article.id);
+    } else {
+      ids.push(article.id);
+    }
+    localStorage.setItem('bookmarks', JSON.stringify(ids));
+    setIsBookmarked(!isBookmarked);
+  };
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group overflow-hidden flex flex-col h-full"
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      whileHover={{ y: -5 }}
+      className={cn(
+        "bento-item group flex flex-col h-full",
+        featured ? "col-span-full lg:col-span-8 lg:row-span-4" : "col-span-full md:col-span-6 lg:col-span-4 lg:row-span-2"
+      )}
     >
-      <div className="p-6 flex-1">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="px-2 py-1 bg-blue-50 text-blue-600 text-xs font-bold uppercase tracking-wider rounded">
-            {article.category}
-          </span>
-          <span className="text-xs text-gray-400 font-medium">
-            {formatDistanceToNow(publishedAt, { addSuffix: true })}
-          </span>
+      {/* Media Section */}
+      {(article.mediaUrl || article.videoUrl) && (
+        <div className={cn("relative overflow-hidden", featured ? "h-64 lg:h-full" : "h-48")}>
+          <img 
+            src={article.mediaUrl || `https://picsum.photos/seed/${article.id}/800/600`} 
+            alt={article.headline}
+            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+            referrerPolicy="no-referrer"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[var(--ink)]/80 via-transparent to-transparent opacity-60" />
+          
+          <div className="absolute top-4 right-4 flex gap-2">
+            <button 
+              onClick={toggleBookmark}
+              className={cn(
+                "p-2 rounded-full backdrop-blur-md transition-all shadow-lg",
+                isBookmarked ? "bg-brand-accent text-white" : "bg-white/20 text-white hover:bg-white/40"
+              )}
+            >
+              <Bookmark className={cn("w-4 h-4", isBookmarked && "fill-current")} />
+            </button>
+            {article.videoUrl && (
+              <div className="bg-brand-accent/90 backdrop-blur-md p-2 rounded-full text-white shadow-lg">
+                <Play className="w-4 h-4 fill-current" />
+              </div>
+            )}
+          </div>
+          
+          <div className="absolute bottom-4 left-4 flex items-center gap-2">
+            <span className="px-2 py-1 bg-brand-accent text-white text-[10px] font-black uppercase tracking-widest rounded-md">
+              {article.category}
+            </span>
+          </div>
         </div>
-        <Link to={`/article/${article.slug}`} className="block group-hover:text-blue-600 transition-colors">
-          <h3 className="text-xl font-bold text-gray-900 leading-tight mb-3 line-clamp-2">
+      )}
+
+      <div className="p-6 flex-1 flex flex-col">
+        {!featured && !article.mediaUrl && (
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-1 bg-brand-accent/10 text-brand-accent text-[10px] font-black uppercase tracking-widest rounded-md">
+                {article.category}
+              </span>
+              <span className="text-[10px] text-[var(--muted)] font-bold uppercase tracking-widest">
+                {formatDistanceToNow(publishedAt, { addSuffix: true })}
+              </span>
+            </div>
+            <button 
+              onClick={toggleBookmark}
+              className={cn(
+                "p-1.5 rounded-full transition-all",
+                isBookmarked ? "text-brand-accent bg-brand-accent/10" : "text-[var(--muted)] hover:text-brand-accent hover:bg-brand-accent/5"
+              )}
+            >
+              <Bookmark className={cn("w-4 h-4", isBookmarked && "fill-current")} />
+            </button>
+          </div>
+        )}
+
+        <Link to={`/article/${article.slug}`} className="block group-hover:text-brand-accent transition-colors">
+          <h3 className={cn(
+            "font-serif font-bold tracking-tight text-[var(--ink)] leading-tight mb-3",
+            featured ? "text-2xl lg:text-4xl" : "text-xl line-clamp-2"
+          )}>
             {article.headline}
           </h3>
         </Link>
-        <p className="text-gray-600 text-sm leading-relaxed line-clamp-3 mb-4">
+        
+        <p className={cn(
+          "text-[var(--muted)] text-sm leading-relaxed mb-6",
+          featured ? "line-clamp-3 lg:line-clamp-4" : "line-clamp-3"
+        )}>
           {article.summary}
         </p>
-      </div>
-      <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">
-          {article.sourceName}
-        </span>
-        <Link to={`/article/${article.slug}`} className="text-blue-600 flex items-center gap-1 text-sm font-bold group/btn">
-          Read More
-          <ChevronRight className="w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
-        </Link>
+
+        <div className="mt-auto pt-4 border-t border-[var(--line)] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 bg-brand-accent/20 rounded-full flex items-center justify-center">
+              <Globe className="w-3 h-3 text-brand-accent" />
+            </div>
+            <span className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-widest">
+              {article.sourceName}
+            </span>
+          </div>
+          <Link to={`/article/${article.slug}`} className="text-brand-accent flex items-center gap-1 text-xs font-black uppercase tracking-widest group/btn">
+            Read
+            <ArrowRight className="w-3 h-3 group-hover/btn:translate-x-1 transition-transform" />
+          </Link>
+        </div>
       </div>
     </motion.div>
   );
 };
 
 const HomePage = ({ articles, lang, searchQuery }: { articles: Article[], lang: string, searchQuery: string }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const { categoryId } = useParams();
+  const [searchParams] = useSearchParams();
+  const urlCategory = categoryId || searchParams.get('category');
+  const navigate = useNavigate();
 
   const filteredArticles = useMemo(() => {
     let filtered = articles.filter(a => a.language === lang);
     
-    if (selectedCategory) {
-      filtered = filtered.filter(a => a.category.toLowerCase() === selectedCategory.toLowerCase());
+    if (urlCategory) {
+      filtered = filtered.filter(a => a.category.toLowerCase() === urlCategory.toLowerCase());
     }
 
     if (searchQuery.trim()) {
@@ -502,58 +702,101 @@ const HomePage = ({ articles, lang, searchQuery }: { articles: Article[], lang: 
     }
 
     return filtered;
-  }, [articles, lang, selectedCategory, searchQuery]);
+  }, [articles, lang, urlCategory, searchQuery]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Hero Section */}
-      <div className="mb-12">
-        <h1 className="text-4xl md:text-6xl font-black text-gray-900 tracking-tight mb-4">
-          Latest <span className="text-blue-600">Global</span> Stories
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      {/* Immersive Header */}
+      <div className="mb-16 text-center lg:text-left">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="inline-block px-4 py-1.5 bg-brand-accent/10 rounded-full text-brand-accent text-[10px] font-black uppercase tracking-[0.3em] mb-6"
+        >
+          Curated by Global Intelligence
+        </motion.div>
+        <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif font-black text-[var(--ink)] tracking-tighter leading-[0.9] mb-8">
+          {urlCategory ? (
+            <>
+              {CATEGORIES.find(c => c.id === urlCategory)?.en || urlCategory} <br />
+              <span className="text-brand-accent italic">Intelligence.</span>
+            </>
+          ) : (
+            <>
+              The World <br />
+              <span className="text-brand-accent italic">In Focus.</span>
+            </>
+          )}
         </h1>
-        <p className="text-lg text-gray-600 max-w-2xl">
-          AI-curated, rewritten, and translated news from across the globe. Stay informed with neutral, summarized, and multi-lingual content.
-        </p>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+          <p className="text-lg text-[var(--muted)] max-w-xl leading-relaxed">
+            {urlCategory 
+              ? `In-depth reporting and AI-driven insights on ${urlCategory} affairs, updated in real-time across the global network.`
+              : "Experience news through the lens of AI. Real-time translation, neutral summarization, and immersive storytelling for the modern reader."
+            }
+          </p>
+          
+          {/* Quick Stats / Bento Mini */}
+          <div className="flex gap-4">
+            <div className="bg-[var(--line)] p-4 rounded-2xl flex flex-col items-center justify-center min-w-[100px]">
+              <span className="text-2xl font-serif font-bold text-[var(--ink)]">{filteredArticles.length}</span>
+              <span className="text-[8px] font-black uppercase tracking-widest text-[var(--muted)]">Stories</span>
+            </div>
+            <div className="bg-[var(--line)] p-4 rounded-2xl flex flex-col items-center justify-center min-w-[100px]">
+              <span className="text-2xl font-serif font-bold text-[var(--ink)]">12+</span>
+              <span className="text-[8px] font-black uppercase tracking-widest text-[var(--muted)]">Regions</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Categories */}
-      <div className="flex overflow-x-auto gap-3 pb-6 mb-8 scrollbar-hide">
+      {/* Categories - Pill Navigation */}
+      <div className="flex overflow-x-auto gap-3 pb-8 mb-12 no-scrollbar">
         <button
-          onClick={() => setSelectedCategory(null)}
+          onClick={() => navigate('/')}
           className={cn(
-            "flex-shrink-0 px-6 py-3 rounded-2xl text-sm font-bold transition-all border",
-            !selectedCategory ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200" : "bg-white border-gray-200 text-gray-600 hover:border-blue-300"
+            "flex-shrink-0 px-8 py-3 rounded-full text-[10px] font-black uppercase tracking-[0.2em] transition-all border",
+            !urlCategory 
+              ? "bg-[var(--ink)] border-[var(--ink)] text-[var(--bg)] shadow-xl" 
+              : "bg-transparent border-[var(--line)] text-[var(--muted)] hover:border-brand-accent hover:text-brand-accent"
           )}
         >
-          All News
+          All Editions
         </button>
         {CATEGORIES.map((cat) => (
           <button
             key={cat.id}
-            onClick={() => setSelectedCategory(cat.id)}
+            onClick={() => navigate(`/category/${cat.id}`)}
             className={cn(
-              "flex-shrink-0 px-6 py-3 rounded-2xl text-sm font-bold transition-all border flex items-center gap-2",
-              selectedCategory === cat.id ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200" : "bg-white border-gray-200 text-gray-600 hover:border-blue-300"
+              "flex-shrink-0 px-8 py-3 rounded-full text-[10px] font-black uppercase tracking-[0.2em] transition-all border flex items-center gap-2",
+              urlCategory === cat.id 
+                ? "bg-[var(--ink)] border-[var(--ink)] text-[var(--bg)] shadow-xl" 
+                : "bg-transparent border-[var(--line)] text-[var(--muted)] hover:border-brand-accent hover:text-brand-accent"
             )}
           >
-            <cat.icon className="w-4 h-4" />
+            <cat.icon className="w-3 h-3" />
             {lang === 'en' ? cat.en : cat.name}
           </button>
         ))}
       </div>
 
-      {/* Articles Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      {/* Bento Grid Layout */}
+      <div className="bento-grid">
         {filteredArticles.length > 0 ? (
-          filteredArticles.map((article) => (
-            <ArticleCard key={article.id} article={article} lang={lang} />
+          filteredArticles.map((article, index) => (
+            <ArticleCard 
+              key={article.id} 
+              article={article} 
+              lang={lang} 
+              featured={index === 0 && !urlCategory && !searchQuery} 
+            />
           ))
         ) : (
-          <div className="col-span-full py-20 text-center">
-            <div className="bg-gray-50 rounded-3xl p-12 inline-block">
-              <Newspaper className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900 mb-2">No articles found</h3>
-              <p className="text-gray-500">Try switching categories or languages.</p>
+          <div className="col-span-full py-32 text-center">
+            <div className="bg-[var(--line)] rounded-[3rem] p-16 inline-block">
+              <Newspaper className="w-16 h-16 text-[var(--muted)] mx-auto mb-6 opacity-20" />
+              <h3 className="text-2xl font-serif font-bold text-[var(--ink)] mb-3">No stories found</h3>
+              <p className="text-[var(--muted)]">Try adjusting your filters or switching languages.</p>
             </div>
           </div>
         )}
@@ -566,36 +809,36 @@ const ArticleDetail = ({ articles }: { articles: Article[] }) => {
   const { slug } = useParams();
   const article = articles.find(a => a.slug === slug);
 
-  if (!article) return <div className="p-20 text-center">Article not found</div>;
+  if (!article) return <div className="p-20 text-center font-serif text-2xl text-[var(--ink)]">Article not found</div>;
 
   const publishedAt = article.publishedAt?.toDate ? article.publishedAt.toDate() : new Date(article.publishedAt);
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <Link to="/" className="inline-flex items-center gap-2 text-sm font-bold text-blue-600 mb-8 hover:gap-3 transition-all">
+        <Link to="/" className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-brand-accent mb-12 hover:gap-3 transition-all">
           <ChevronRight className="w-4 h-4 rotate-180" />
-          Back to Home
+          Back to Intelligence
         </Link>
         
-        <div className="flex items-center gap-3 mb-6">
-          <span className="px-3 py-1 bg-blue-600 text-white text-xs font-black uppercase tracking-widest rounded-full">
+        <div className="flex items-center gap-3 mb-8">
+          <span className="px-3 py-1 bg-brand-accent text-white text-[10px] font-black uppercase tracking-widest rounded-full">
             {article.category}
           </span>
-          <span className="text-sm text-gray-500 font-medium">
+          <span className="text-[10px] text-[var(--muted)] font-bold uppercase tracking-widest">
             {formatDistanceToNow(publishedAt, { addSuffix: true })}
           </span>
         </div>
 
-        <h1 className="text-4xl md:text-5xl font-black text-gray-900 leading-tight mb-8">
+        <h1 className="text-4xl md:text-6xl lg:text-7xl font-serif font-black text-[var(--ink)] leading-[1.1] tracking-tighter mb-12">
           {article.headline}
         </h1>
 
         {article.isImage && article.mediaUrl && (
-          <div className="mb-12 rounded-3xl overflow-hidden shadow-2xl border border-gray-100">
+          <div className="mb-16 rounded-[3rem] overflow-hidden shadow-2xl border border-[var(--line)]">
             <img 
               src={article.mediaUrl} 
               alt={article.headline}
@@ -606,7 +849,7 @@ const ArticleDetail = ({ articles }: { articles: Article[] }) => {
         )}
 
         {article.videoUrl && (
-          <div className="mb-12 rounded-3xl overflow-hidden shadow-2xl bg-black aspect-video">
+          <div className="mb-16 rounded-[3rem] overflow-hidden shadow-2xl bg-black aspect-video">
             <video 
               src={article.videoUrl} 
               controls 
@@ -616,39 +859,52 @@ const ArticleDetail = ({ articles }: { articles: Article[] }) => {
           </div>
         )}
 
-        <div className="bg-blue-50 rounded-3xl p-8 mb-12 border border-blue-100">
-          <h2 className="text-lg font-bold text-blue-900 mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
-            Key Highlights
-          </h2>
-          <ul className="space-y-3">
-            {article.highlights.map((h, i) => (
-              <li key={i} className="flex gap-3 text-blue-800 leading-relaxed">
-                <span className="text-blue-400 font-black">•</span>
-                {h}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="prose prose-lg prose-blue max-w-none text-gray-700 leading-relaxed mb-12">
-          <ReactMarkdown>{article.content}</ReactMarkdown>
-        </div>
-
-        <div className="pt-12 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-          <div>
-            <span className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-1">Source</span>
-            <span className="text-lg font-bold text-gray-900">{article.sourceName}</span>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+          {/* Highlights Sidebar */}
+          <div className="lg:col-span-4">
+            <div className="bg-brand-accent/5 rounded-[2rem] p-8 border border-brand-accent/10 sticky top-32">
+              <h2 className="text-xs font-black text-brand-accent uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4" />
+                Intelligence Brief
+              </h2>
+              <ul className="space-y-6">
+                {article.highlights.map((h, i) => (
+                  <li key={i} className="text-sm text-[var(--ink)] leading-relaxed font-medium flex gap-3">
+                    <span className="text-brand-accent font-black">0{i+1}</span>
+                    {h}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-          <a
-            href={article.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-gray-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-gray-800 transition-colors"
-          >
-            Visit Original Source
-            <ExternalLink className="w-4 h-4" />
-          </a>
+
+          {/* Main Content */}
+          <div className="lg:col-span-8">
+            <div className="prose prose-lg dark:prose-invert prose-brand max-w-none text-[var(--ink)] leading-relaxed font-serif text-xl mb-16">
+              <ReactMarkdown>{article.content}</ReactMarkdown>
+            </div>
+
+            <div className="pt-12 border-t border-[var(--line)] flex flex-col sm:flex-row sm:items-center justify-between gap-8">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-brand-accent/10 rounded-full flex items-center justify-center">
+                  <Globe className="w-6 h-6 text-brand-accent" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-black text-[var(--muted)] uppercase tracking-widest block mb-1">Source Intelligence</span>
+                  <span className="text-xl font-serif font-bold text-[var(--ink)]">{article.sourceName}</span>
+                </div>
+              </div>
+              <a
+                href={article.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-3 bg-[var(--ink)] text-[var(--bg)] px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-brand-accent transition-all shadow-xl"
+              >
+                Original Report
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            </div>
+          </div>
         </div>
       </motion.div>
     </div>
@@ -1050,12 +1306,12 @@ const AdminPage = ({ user, articles, rawNews }: { user: User | null, articles: A
   if (user.email !== ADMIN_EMAIL) return <div className="p-20 text-center text-red-600 font-bold">Access Denied: You do not have admin privileges.</div>;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-12">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+    <div className="max-w-7xl mx-auto px-4 py-6 md:py-12">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 md:gap-12">
         <div className="lg:col-span-2">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
-            <h2 className="text-3xl font-black text-gray-900">Admin Dashboard</h2>
-            <div className="flex flex-wrap gap-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 md:mb-12">
+            <h2 className="text-2xl md:text-3xl font-black text-gray-900">Admin Dashboard</h2>
+            <div className="flex flex-wrap gap-3 md:gap-4">
               {!hasApiKey && (
                 <button
                   onClick={selectApiKey}
@@ -1193,11 +1449,94 @@ const AdminPage = ({ user, articles, rawNews }: { user: User | null, articles: A
 
 export default function App() {
   return (
-    <ErrorBoundary>
-      <AppContent />
-    </ErrorBoundary>
+    <Router>
+      <ErrorBoundary>
+        <AppContent />
+      </ErrorBoundary>
+    </Router>
   );
 }
+
+const LiveFeedPage = ({ articles, lang }: { articles: Article[], lang: string }) => {
+  const liveArticles = useMemo(() => {
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    return articles
+      .filter(a => {
+        const date = a.publishedAt?.toDate ? a.publishedAt.toDate() : new Date(a.publishedAt);
+        return date > oneDayAgo;
+      })
+      .sort((a, b) => {
+        const dateA = a.publishedAt?.toDate ? a.publishedAt.toDate() : new Date(a.publishedAt);
+        const dateB = b.publishedAt?.toDate ? b.publishedAt.toDate() : new Date(b.publishedAt);
+        return dateB.getTime() - dateA.getTime();
+      });
+  }, [articles]);
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-12">
+      <div className="mb-12">
+        <h1 className="text-5xl font-serif font-black text-[var(--ink)] mb-4">Live Update Feed</h1>
+        <p className="text-[var(--muted)] max-w-2xl">Real-time intelligence stream from across the global network. Updated as events unfold.</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {liveArticles.map(article => (
+          <ArticleCard key={article.id} article={article} lang={lang} />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const BookmarksPage = ({ articles, lang, user }: { articles: Article[], lang: string, user: User | null }) => {
+  const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('bookmarks');
+    if (saved) setBookmarkedIds(JSON.parse(saved));
+  }, []);
+
+  const bookmarkedArticles = useMemo(() => {
+    return articles.filter(a => bookmarkedIds.includes(a.id));
+  }, [articles, bookmarkedIds]);
+
+  if (!user) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-32 text-center">
+        <h2 className="text-3xl font-serif font-bold mb-4">Sign in to view bookmarks</h2>
+        <p className="text-[var(--muted)] mb-8">Your reading list is synced across all your devices.</p>
+        <button
+          onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
+          className="bg-[var(--ink)] text-[var(--bg)] px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs"
+        >
+          Sign In
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-12">
+      <div className="mb-12">
+        <h1 className="text-5xl font-serif font-black text-[var(--ink)] mb-4">Your Intelligence Brief</h1>
+        <p className="text-[var(--muted)] max-w-2xl">Saved reports and deep-dives for your personal review.</p>
+      </div>
+      {bookmarkedArticles.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {bookmarkedArticles.map(article => (
+            <ArticleCard key={article.id} article={article} lang={lang} />
+          ))}
+        </div>
+      ) : (
+        <div className="py-32 text-center bg-[var(--line)] rounded-[3rem]">
+          <Bookmark className="w-16 h-16 text-[var(--muted)] mx-auto mb-6 opacity-20" />
+          <h3 className="text-2xl font-serif font-bold text-[var(--ink)] mb-3">No bookmarks yet</h3>
+          <p className="text-[var(--muted)]">Save articles to read them later, even offline.</p>
+        </div>
+      )}
+    </div>
+  );
+};
 
 function AppContent() {
   const [user, setUser] = useState<User | null>(null);
@@ -1232,6 +1571,18 @@ function AppContent() {
       handleFirestoreError(error, OperationType.LIST, "articles");
     });
 
+    return () => {
+      unsubAuth();
+      unsubArticles();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!user || user.email !== ADMIN_EMAIL) {
+      setRawNews([]);
+      return;
+    }
+
     const qRaw = query(collection(db, "raw_news"), where("processed", "==", false), orderBy("createdAt", "desc"), limit(50));
     const unsubRaw = onSnapshot(qRaw, (snapshot) => {
       setRawNews(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -1239,92 +1590,98 @@ function AppContent() {
       handleFirestoreError(error, OperationType.LIST, "raw_news");
     });
 
-    return () => {
-      unsubAuth();
-      unsubArticles();
-      unsubRaw();
-    };
-  }, []);
+    return () => unsubRaw();
+  }, [user]);
 
   if (loading) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-500 font-medium">Loading Global News...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-brand-limestone">
+        <Loader2 className="w-12 h-12 text-brand-accent animate-spin" />
       </div>
     );
   }
 
   return (
-    <Router>
-      <div className="min-h-screen bg-gray-50 font-sans selection:bg-blue-100 selection:text-blue-900">
-        <Navbar 
-          user={user} 
-          lang={lang} 
-          setLang={setLang} 
-          searchQuery={searchQuery} 
-          setSearchQuery={setSearchQuery} 
-        />
-        
-        <main>
-          <Routes>
-            <Route path="/" element={<HomePage articles={articles} lang={lang} searchQuery={searchQuery} />} />
-            <Route path="/article/:slug" element={<ArticleDetail articles={articles} />} />
-            <Route path="/admin" element={<AdminPage user={user} articles={articles} rawNews={rawNews} />} />
-          </Routes>
-        </main>
+    <ThemeProvider>
+      <ErrorBoundary>
+        <div className="min-h-screen flex flex-col pb-24 md:pb-0">
+          <Navbar 
+            user={user} 
+            lang={lang} 
+            setLang={setLang} 
+            searchQuery={searchQuery} 
+            setSearchQuery={setSearchQuery} 
+          />
+          
+          <main className="flex-1">
+            <Routes>
+              <Route path="/" element={<HomePage articles={articles} lang={lang} searchQuery={searchQuery} />} />
+              <Route path="/category/:categoryId" element={<HomePage articles={articles} lang={lang} searchQuery={searchQuery} />} />
+              <Route path="/live" element={<LiveFeedPage articles={articles} lang={lang} />} />
+              <Route path="/bookmarks" element={<BookmarksPage articles={articles} lang={lang} user={user} />} />
+              <Route path="/article/:slug" element={<ArticleDetail articles={articles} />} />
+              <Route path="/admin" element={<AdminPage user={user} articles={articles} rawNews={rawNews} />} />
+            </Routes>
+          </main>
 
-        <footer className="bg-brand-ink text-white py-16 mt-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
+          <footer className="bg-[var(--ink)] text-[var(--bg)] py-16 px-4">
+            <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12">
               <div className="col-span-1 md:col-span-2">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="bg-brand-accent p-2 rounded-sm">
+                  <div className="bg-brand-accent p-2 rounded-2xl">
                     <Newspaper className="text-white w-6 h-6" />
                   </div>
-                  <span className="text-2xl font-serif font-black tracking-tighter">GLOBAL NEWS</span>
+                  <span className="text-2xl font-serif font-black tracking-tighter">GLOBAL NEWS AI</span>
                 </div>
-                <p className="text-gray-400 text-sm max-w-md leading-relaxed mb-6">
-                  An automated news portal powered by AI. We collect, rewrite, and translate news to provide a neutral perspective across multiple languages. Our mission is to bridge the gap between global events and local understanding.
+                <p className="text-[var(--muted)] max-w-md leading-relaxed mb-8">
+                  The next generation of news. Powered by advanced artificial intelligence to bring you the most accurate, neutral, and immersive news experience on the planet.
                 </p>
                 <div className="flex gap-4">
-                  <button className="p-2 bg-gray-800 rounded-full hover:bg-brand-accent transition-colors"><Mail className="w-4 h-4" /></button>
-                  <button className="p-2 bg-gray-800 rounded-full hover:bg-brand-accent transition-colors"><Share2 className="w-4 h-4" /></button>
+                  <button className="p-3 bg-[var(--line)] rounded-full hover:text-brand-accent transition-colors">
+                    <Globe className="w-5 h-5" />
+                  </button>
+                  <button className="p-3 bg-[var(--line)] rounded-full hover:text-brand-accent transition-colors">
+                    <Mail className="w-5 h-5" />
+                  </button>
+                  <button className="p-3 bg-[var(--line)] rounded-full hover:text-brand-accent transition-colors">
+                    <Share2 className="w-5 h-5" />
+                  </button>
                 </div>
               </div>
               
               <div>
-                <h4 className="text-xs font-bold uppercase tracking-widest text-brand-accent mb-6">Sections</h4>
-                <ul className="space-y-4 text-sm text-gray-400">
-                  {CATEGORIES.slice(0, 5).map(cat => (
-                    <li key={cat.id}><Link to={`/?category=${cat.id}`} className="hover:text-white transition-colors">{lang === 'en' ? cat.en : cat.name}</Link></li>
-                  ))}
+                <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-brand-accent mb-6">Network</h4>
+                <ul className="space-y-4 text-sm font-bold uppercase tracking-widest">
+                  <li><Link to="/" className="hover:text-brand-accent transition-colors">Intelligence</Link></li>
+                  <li><Link to="/category/world" className="hover:text-brand-accent transition-colors">Global Reports</Link></li>
+                  <li><Link to="/live" className="hover:text-brand-accent transition-colors">Live Feed</Link></li>
+                  <li><Link to="/category/science" className="hover:text-brand-accent transition-colors">Archive</Link></li>
                 </ul>
               </div>
 
               <div>
-                <h4 className="text-xs font-bold uppercase tracking-widest text-brand-accent mb-6">Support</h4>
-                <ul className="space-y-4 text-sm text-gray-400">
-                  <li><Link to="/about" className="hover:text-white transition-colors">About Us</Link></li>
-                  <li><Link to="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
-                  <li><Link to="/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
-                  <li><Link to="/contact" className="hover:text-white transition-colors">Contact</Link></li>
+                <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-brand-accent mb-6">Legal</h4>
+                <ul className="space-y-4 text-sm font-bold uppercase tracking-widest">
+                  <li><Link to="/" className="hover:text-brand-accent transition-colors">Privacy Protocol</Link></li>
+                  <li><Link to="/" className="hover:text-brand-accent transition-colors">Terms of Service</Link></li>
+                  <li><Link to="/" className="hover:text-brand-accent transition-colors">AI Ethics</Link></li>
+                  <li><Link to="/" className="hover:text-brand-accent transition-colors">Contact</Link></li>
                 </ul>
               </div>
             </div>
-            
-            <div className="pt-8 border-t border-gray-800 flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-bold text-gray-500 uppercase tracking-widest">
-              <div>© 2026 Global News AI • Built with Gemini & Firebase</div>
-              <div className="flex gap-6">
-                <span>English Edition</span>
-                <span>Nepali Edition</span>
-              </div>
+            <div className="max-w-7xl mx-auto mt-16 pt-8 border-t border-[var(--line)] flex flex-col md:flex-row justify-between items-center gap-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted)]">
+                © 2026 Global News AI Network. All Rights Reserved.
+              </p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted)] flex items-center gap-2">
+                Built with <HeartPulse className="w-3 h-3 text-red-500" /> for the Future.
+              </p>
             </div>
-          </div>
-        </footer>
-      </div>
-    </Router>
+          </footer>
+
+          <BottomNav lang={lang} user={user} />
+        </div>
+      </ErrorBoundary>
+    </ThemeProvider>
   );
 }
